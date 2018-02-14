@@ -145,6 +145,14 @@ float LTRResultIterator::Confidence(PageIteratorLevel level) const {
   return 0.0f;
 }
 
+void LTRResultIterator::RowAttributes(float* row_height, float* descenders,
+                                      float* ascenders) const {
+  *row_height = it_->row()->row->x_height() + it_->row()->row->ascenders() -
+                it_->row()->row->descenders();
+  *descenders = it_->row()->row->descenders();
+  *ascenders = it_->row()->row->ascenders();
+}
+
 // Returns the font attributes of the current word. If iterating at a higher
 // level object than words, eg textlines, then this will return the
 // attributes of the first word in that textline.
@@ -161,6 +169,12 @@ const char* LTRResultIterator::WordFontAttributes(bool* is_bold,
                                                   bool* is_smallcaps,
                                                   int* pointsize,
                                                   int* font_id) const {
+  float row_height = it_->row()->row->x_height() +
+      it_->row()->row->ascenders() - it_->row()->row->descenders();
+  // Convert from pixels to printers points.
+  *pointsize = scaled_yres_ > 0
+      ? static_cast<int>(row_height * kPointsPerInch / scaled_yres_ + 0.5)
+      : 0;
   if (it_->word() == NULL) return NULL;  // Already at the end!
   if (it_->word()->fontinfo == NULL) {
     *font_id = -1;
@@ -174,12 +188,6 @@ const char* LTRResultIterator::WordFontAttributes(bool* is_bold,
   *is_monospace = font_info.is_fixed_pitch();
   *is_serif = font_info.is_serif();
   *is_smallcaps = it_->word()->small_caps;
-  float row_height = it_->row()->row->x_height() +
-      it_->row()->row->ascenders() - it_->row()->row->descenders();
-  // Convert from pixels to printers points.
-  *pointsize = scaled_yres_ > 0
-      ? static_cast<int>(row_height * kPointsPerInch / scaled_yres_ + 0.5)
-      : 0;
 
   return font_info.name;
 }
@@ -210,6 +218,12 @@ bool LTRResultIterator::WordIsFromDictionary() const {
   int permuter = it_->word()->best_choice->permuter();
   return permuter == SYSTEM_DAWG_PERM || permuter == FREQ_DAWG_PERM ||
          permuter == USER_DAWG_PERM;
+}
+
+// Returns the number of blanks before the current word.
+int LTRResultIterator::BlanksBeforeWord() const {
+  if (it_->word() == NULL) return 1;
+  return it_->word()->word->space();
 }
 
 // Returns true if the current word is numeric.
@@ -356,7 +370,7 @@ bool ChoiceIterator::Next() {
 }
 
 // Returns the null terminated UTF-8 encoded text string for the current
-// choice. Use delete [] to free after use.
+// choice. Do NOT use delete [] to free after use.
 const char* ChoiceIterator::GetUTF8Text() const {
   if (choice_it_ == NULL)
     return NULL;

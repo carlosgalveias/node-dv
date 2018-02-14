@@ -25,8 +25,9 @@
  *====================================================================*/
 
 
-/*
- *  maze.c
+/*!
+ * \file maze.c
+ * <pre>
  *
  *      This is a game with a pedagogical slant.  A maze is represented
  *      by a binary image.  The ON pixels (fg) are walls.  The goal is
@@ -54,6 +55,7 @@
  *      in an image.
  *
  *          l_int32          pixFindLargestRectangle()
+ * </pre>
  */
 
 #include <string.h>
@@ -101,17 +103,18 @@ static l_int32 localSearchForBackground(PIX  *pix, l_int32  *px,
  *             Binary maze generation as cellular automaton            *
  *---------------------------------------------------------------------*/
 /*!
- *  generateBinaryMaze()
+ * \brief   generateBinaryMaze()
  *
- *      Input:  w, h  (size of maze)
- *              xi, yi  (initial location)
- *              wallps (probability that a pixel to the side is ON)
- *              ranis (ratio of prob that pixel in forward direction
+ * \param[in]    w, h  size of maze
+ * \param[in]    xi, yi  initial location
+ * \param[in]    wallps probability that a pixel to the side is ON
+ * \param[in]    ranis ratio of prob that pixel in forward direction
  *                     is a wall to the probability that pixel in
- *                     side directions is a wall)
- *      Return: pix, or null on error
+ *                     side directions is a wall
+ * \return  pix, or NULL on error
  *
- *  Notes:
+ * <pre>
+ * Notes:
  *      (1) We have two input probability factors that determine the
  *          density of walls and average length of straight passages.
  *          When ranis < 1.0, you are more likely to generate a wall
@@ -139,6 +142,7 @@ static l_int32 localSearchForBackground(PIX  *pix, l_int32  *px,
  *          pixGetPixel() and pixSetPixel(), this function can be sped
  *          up with little effort using raster line pointers and the
  *          GET_DATA* and SET_DATA* macros.
+ * </pre>
  */
 PIX *
 generateBinaryMaze(l_int32  w,
@@ -211,8 +215,7 @@ L_QUEUE   *lq;
                     testp = wallpf;
                 if (frand <= testp) {  /* make it a wall */
                     pixSetPixel(pixd, x - 1, y, 1);
-                }
-                else {  /* not a wall */
+                } else {  /* not a wall */
                     el = mazeelCreate(x - 1, y, DIR_WEST);
                     lqueueAdd(lq, el);
                 }
@@ -228,8 +231,7 @@ L_QUEUE   *lq;
                     testp = wallpf;
                 if (frand <= testp) {  /* make it a wall */
                     pixSetPixel(pixd, x, y - 1, 1);
-                }
-                else {  /* not a wall */
+                } else {  /* not a wall */
                     el = mazeelCreate(x, y - 1, DIR_NORTH);
                     lqueueAdd(lq, el);
                 }
@@ -245,8 +247,7 @@ L_QUEUE   *lq;
                     testp = wallpf;
                 if (frand <= testp) {  /* make it a wall */
                     pixSetPixel(pixd, x + 1, y, 1);
-                }
-                else {  /* not a wall */
+                } else {  /* not a wall */
                     el = mazeelCreate(x + 1, y, DIR_EAST);
                     lqueueAdd(lq, el);
                 }
@@ -262,14 +263,13 @@ L_QUEUE   *lq;
                     testp = wallpf;
                 if (frand <= testp) {  /* make it a wall */
                     pixSetPixel(pixd, x, y + 1, 1);
-                }
-                else {  /* not a wall */
+                } else {  /* not a wall */
                     el = mazeelCreate(x, y + 1, DIR_SOUTH);
                     lqueueAdd(lq, el);
                 }
             }
         }
-        FREE(elp);
+        LEPT_FREE(elp);
     }
 
     lqueueDestroy(&lq, TRUE);
@@ -285,7 +285,7 @@ mazeelCreate(l_int32  x,
 {
 MAZEEL *el;
 
-    el = (MAZEEL *)CALLOC(1, sizeof(MAZEEL));
+    el = (MAZEEL *)LEPT_CALLOC(1, sizeof(MAZEEL));
     el->x = x;
     el->y = y;
     el->dir = dir;
@@ -297,19 +297,20 @@ MAZEEL *el;
  *                           Binary maze search                        *
  *---------------------------------------------------------------------*/
 /*!
- *  pixSearchBinaryMaze()
+ * \brief   pixSearchBinaryMaze()
  *
- *      Input:  pixs (1 bpp, maze)
- *              xi, yi  (beginning point; use same initial point
- *                       that was used to generate the maze)
- *              xf, yf  (end point, or close to it)
- *              &ppixd (<optional return> maze with path illustrated, or
+ * \param[in]    pixs 1 bpp, maze
+ * \param[in]    xi, yi  beginning point; use same initial point
+ *                       that was used to generate the maze
+ * \param[in]    xf, yf  end point, or close to it
+ * \param[out]   ppixd [optional] maze with path illustrated, or
  *                     if no path possible, the part of the maze
- *                     that was searched)
- *      Return: pta (shortest path), or null if either no path
+ *                     that was searched
+ * \return  pta shortest path, or NULL if either no path
  *              exists or on error
  *
- *  Notes:
+ * <pre>
+ * Notes:
  *      (1) Because of the overhead in calling pixGetPixel() and
  *          pixSetPixel(), we have used raster line pointers and the
  *          GET_DATA* and SET_DATA* macros for many of the pix accesses.
@@ -320,7 +321,7 @@ MAZEEL *el;
  *            We use a queue to implement a breadth-first search.  Two auxiliary
  *          "image" data structures can be used: one to mark the visited
  *          pixels and one to give the direction to the parent for each
- *          visited pixels.  The first structure is used to avoid putting
+ *          visited pixel.  The first structure is used to avoid putting
  *          pixels on the queue more than once, and the second is used
  *          for retracing back to the origin, like the breadcrumbs in
  *          Hansel and Gretel.  Each pixel taken off the queue is destroyed
@@ -329,7 +330,7 @@ MAZEEL *el;
  *          to some value that signifies "not yet visited."  (We use
  *          a binary image for marking visited pixels because it is clearer.)
  *          This method for a simple search of a binary maze is implemented in
- *          searchBinaryMaze().
+ *          pixSearchBinaryMaze().
  *            An alternative method would store the (manhattan) distance
  *          from the start point with each pixel on the queue.  The children
  *          of each pixel get a distance one larger than the parent.  These
@@ -338,6 +339,7 @@ MAZEEL *el;
  *          end point is reached, the distance map is used to backtrack
  *          along a minimum path.  There may be several equal length
  *          minimum paths, any one of which can be chosen this way.
+ * </pre>
  */
 PTA *
 pixSearchBinaryMaze(PIX     *pixs,
@@ -405,7 +407,7 @@ PTA       *pta;
         y = elp->y;
         if (x == xf && y == yf) {
             found = TRUE;
-            FREE(elp);
+            LEPT_FREE(elp);
             break;
         }
 
@@ -457,12 +459,12 @@ PTA       *pta;
                 }
             }
         }
-        FREE(elp);
+        LEPT_FREE(elp);
     }
 
     lqueueDestroy(&lq, TRUE);
     pixDestroy(&pixm);
-    FREE(linem1);
+    LEPT_FREE(linem1);
 
     if (ppixd) {
         pixd = pixUnpackBinary(pixs, 32, 1);
@@ -472,22 +474,7 @@ PTA       *pta;
     composeRGBPixel(0, 255, 0, &gpixel);
     composeRGBPixel(0, 0, 255, &bpixel);  /* end point */
 
-
-    if (!found) {
-        L_INFO(" No path found\n", procName);
-        if (pixd) {  /* paint all visited locations */
-            lined32 = pixGetLinePtrs(pixd, NULL);
-            for (i = 0; i < h; i++) {
-                for (j = 0; j < w; j++) {
-                    val = GET_DATA_BYTE(linep8[i], j);
-                    if (val != 0 && pixd)
-                        SET_DATA_FOUR_BYTES(lined32[i], j, gpixel);
-                }
-            }
-            FREE(lined32);
-        }
-    }
-    else {   /* write path onto pixd */
+    if (found) {
         L_INFO(" Path found\n", procName);
         pta = ptaCreate(0);
         x = xf;
@@ -496,7 +483,7 @@ PTA       *pta;
             ptaAddPt(pta, x, y);
             if (x == xi && y == yi)
                 break;
-            if (pixd)
+            if (pixd)  /* write 'gpixel' onto the path */
                 pixSetPixel(pixd, x, y, gpixel);
             pixGetPixel(pixp, x, y, &val);
             if (val == DIR_NORTH)
@@ -508,6 +495,19 @@ PTA       *pta;
             else if (val == DIR_WEST)
                 x--;
         }
+    } else {
+        L_INFO(" No path found\n", procName);
+        if (pixd) {  /* paint all visited locations */
+            lined32 = pixGetLinePtrs(pixd, NULL);
+            for (i = 0; i < h; i++) {
+                for (j = 0; j < w; j++) {
+                    val = GET_DATA_BYTE(linep8[i], j);
+                    if (val != 0 && pixd)
+                        SET_DATA_FOUR_BYTES(lined32[i], j, gpixel);
+                }
+            }
+            LEPT_FREE(lined32);
+        }
     }
     if (pixd) {
         pixSetPixel(pixd, xi, yi, rpixel);
@@ -515,18 +515,19 @@ PTA       *pta;
     }
 
     pixDestroy(&pixp);
-    FREE(lines1);
-    FREE(linep8);
+    LEPT_FREE(lines1);
+    LEPT_FREE(linep8);
     return pta;
 }
 
 
 /*!
- *  localSearchForBackground()
+ * \brief   localSearchForBackground()
  *
- *      Input:  &x, &y (starting position for search; return found position)
- *              maxrad (max distance to search from starting location)
- *      Return: 0 if bg pixel found; 1 if not found
+ * \param[in]    pix
+ * \param[out]   px, py starting position for search; return found position
+ * \param[in]    maxrad max distance to search from starting location
+ * \return  0 if bg pixel found; 1 if not found
  */
 static l_int32
 localSearchForBackground(PIX  *pix,
@@ -573,30 +574,30 @@ l_uint32  val;
  *                            Gray maze search                         *
  *---------------------------------------------------------------------*/
 /*!
- *  pixSearchGrayMaze()
+ * \brief   pixSearchGrayMaze()
  *
- *      Input:  pixs (1 bpp, maze)
- *              xi, yi  (beginning point; use same initial point
- *                       that was used to generate the maze)
- *              xf, yf  (end point, or close to it)
- *              &ppixd (<optional return> maze with path illustrated, or
+ * \param[in]    pixs 1 bpp, maze
+ * \param[in]    xi, yi  beginning point; use same initial point
+ *                       that was used to generate the maze
+ * \param[in]    xf, yf  end point, or close to it
+ * \param[out]   ppixd [optional] maze with path illustrated, or
  *                     if no path possible, the part of the maze
- *                     that was searched)
- *      Return: pta (shortest path), or null if either no path
+ *                     that was searched
+ * \return  pta shortest path, or NULL if either no path
  *              exists or on error
  *
  *  Commentary:
  *      Consider first a slight generalization of the binary maze
  *      search problem.  Suppose that you can go through walls,
- *      but the cost is higher (say, an increment of 3 to go into
- *      a wall pixel rather than 1)?  You're still trying to find
+ *      but the cost is higher say, an increment of 3 to go into
+ *      a wall pixel rather than 1?  You're still trying to find
  *      the shortest path.  One way to do this is with an ordered
  *      queue, and a simple way to visualize an ordered queue is as
  *      a set of stacks, each stack being marked with the distance
  *      of each pixel in the stack from the start.  We place the
  *      start pixel in stack 0, pop it, and process its 4 children.
  *      Each pixel is given a distance that is incremented from that
- *      of its parent (0 in this case), depending on if it is a wall
+ *      of its parent 0 in this case, depending on if it is a wall
  *      pixel or not.  That value may be recorded on a distance map,
  *      according to the algorithm below.  For children of the first
  *      pixel, those not on a wall go in stack 1, and wall
@@ -606,12 +607,12 @@ l_uint32  val;
  *      distance value, were it to be placed on a stack, is compared
  *      with the value for it that is on the distance map.  There
  *      are three possible cases:
- *         (1) If the pixel has not yet been registered, it is pushed
+ *         1 If the pixel has not yet been registered, it is pushed
  *             on its stack and the distance is written to the map.
- *         (2) If it has previously been registered with a higher distance,
+ *         2 If it has previously been registered with a higher distance,
  *             the distance on the map is relaxed to that of the
  *             current pixel, which is then placed on its stack.
- *         (3) If it has previously been registered with an equal
+ *         3 If it has previously been registered with an equal
  *             or lower value, the pixel is discarded.
  *      The pixels are popped and processed successively from
  *      stack 1, and when stack 1 is empty, popping starts on stack 2.
@@ -619,8 +620,8 @@ l_uint32  val;
  *      a stack.   The minimum path is then derived from the distance map,
  *      going back from the end point as before.  This is just Dijkstra's
  *      algorithm for a directed graph; here, the underlying graph
- *      (consisting of the pixels and four edges connecting each pixel
- *      to its 4-neighbor) is a special case of a directed graph, where
+ *      consisting of the pixels and four edges connecting each pixel
+ *      to its 4-neighbor is a special case of a directed graph, where
  *      each edge is bi-directional.  The implementation of this generalized
  *      maze search is left as an exercise to the reader.
  *
@@ -633,17 +634,17 @@ l_uint32  val;
  *      moving on this surface between two specified end points.
  *      For example, if the cost across an edge between two pixels
  *      depends on the "gradient", you can use:
- *           cost = 1 + L_ABS(deltaV)
+ *           cost = 1 + L_ABSdeltaV
  *      where deltaV is the difference in value between two adjacent
  *      pixels.  If the costs are all integers, we can still use an array
- *      of stacks to avoid ordering the queue (e.g., by using a heap sort.)
+ *      of stacks to avoid ordering the queue e.g., by using a heap sort.
  *      This is a neat problem, because you don't even have to build a
  *      maze -- you can can use it on any grayscale image!
  *
  *      Rather than using an array of stacks, a more practical
  *      approach is to implement with a priority queue, which is
  *      a queue that is sorted so that the elements with the largest
- *      (or smallest) key values always come off first.  The
+ *      or smallest key values always come off first.  The
  *      priority queue is efficiently implemented as a heap, and
  *      this is how we do it.  Suppose you run the algorithm
  *      using a priority queue, doing the bookkeeping with an
@@ -656,11 +657,11 @@ l_uint32  val;
  *      the queue, you're done, and you can trace the path backward,
  *      either always going downhill or using an auxiliary image to
  *      give you the direction to go at each step.  This is implemented
- *      here in searchGrayMaze().
+ *      here in searchGrayMaze.
  *
  *      Do we really have to use a sorted queue?  Can we solve this
- *      generalized maze with an unsorted queue of pixels?  (Or even
- *      an unsorted stack, doing a depth-first search (DFS)?)
+ *      generalized maze with an unsorted queue of pixels?  Or even
+ *      an unsorted stack, doing a depth-first search (DFS)?
  *      Consider a different algorithm for this generalized maze, where
  *      we travel again breadth first, but this time use a single,
  *      unsorted queue.  An auxiliary image is used as before to
@@ -678,36 +679,36 @@ l_uint32  val;
  *      see if a pixel with a lower distance has been put on the queue,
  *      and, if so, we discard the pixel we just popped.  So the
  *      "while" loop looks like this:
- *        - pop a pixel from the queue
- *        - check its distance against the distance stored in the
+ *        ~ pop a pixel from the queue
+ *        ~ check its distance against the distance stored in the
  *          distance map; if larger, discard
- *        - otherwise, for each of its neighbors:
- *            - compute its distance from the start pixel
- *            - compare this distance with that on the distance map:
- *                - if the distance map value higher, relax the distance
+ *        ~ otherwise, for each of its neighbors:
+ *            ~ compute its distance from the start pixel
+ *            ~ compare this distance with that on the distance map:
+ *                ~ if the distance map value higher, relax the distance
  *                  and push the pixel on the queue
- *                - if the distance map value is lower, discard the pixel
+ *                ~ if the distance map value is lower, discard the pixel
  *
  *      How does this loop terminate?  Before, with an ordered queue,
  *      it terminates when you pop the end pixel.  But with an unordered
- *      queue (or stack), the first time you hit the end pixel, the
+ *      queue or stack, the first time you hit the end pixel, the
  *      distance is not guaranteed to be correct, because the pixels
  *      along the shortest path may not have yet been visited and relaxed.
  *      Because the shortest path can theoretically go anywhere,
  *      we must keep going.  How do we know when to stop?   Dijkstra
  *      uses an ordered queue to systematically remove nodes from
- *      further consideration.  (Each time a pixel is popped, we're
+ *      further consideration.  Each time a pixel is popped, we're
  *      done with it; it's "finalized" in the Dijkstra sense because
- *      we know the shortest path to it.)  However, with an unordered
+ *      we know the shortest path to it.  However, with an unordered
  *      queue, the brute force answer is: stop when the queue
- *      (or stack) is empty, because then every pixel in the image
+ *      or stack is empty, because then every pixel in the image
  *      has been assigned its minimum "distance" from the start pixel.
  *
  *      This is similar to the situation when you use a stack for the
- *      simpler uniform-step problem: with breadth-first search (BFS)
+ *      simpler uniform-step problem: with breadth-first search BFS
  *      the pixels on the queue are automatically ordered, so you are
  *      done when you locate the end pixel as a neighbor of a popped pixel;
- *      whereas depth-first search (DFS), using a stack, requires,
+ *      whereas depth-first search DFS, using a stack, requires,
  *      in general, a search of every accessible pixel.  Further, if
  *      a pixel is revisited with a smaller distance, that distance is
  *      recorded and the pixel is put on the stack again.
@@ -760,13 +761,13 @@ PTA      *pta;
     pixd = NULL;
     pta = NULL;
 
+        /* Allocate stuff */
     pixr = pixCreate(w, h, 32);
     pixSetAll(pixr);  /* initialize to max value */
     pixp = pixCreate(w, h, 8);  /* direction to parent stored as enum val */
     lines8 = pixGetLinePtrs(pixs, NULL);
     linep8 = pixGetLinePtrs(pixp, NULL);
     liner32 = pixGetLinePtrs(pixr, NULL);
-
     lh = lheapCreate(0, L_SORT_INCREASING);  /* always remove closest pixels */
 
         /* Prime the heap with the first pixel */
@@ -784,12 +785,14 @@ PTA      *pta;
            the destination point (xf, yf) off the queue. */
     while (lheapGetCount(lh) > 0) {
         elp = (MAZEEL *)lheapRemove(lh);
-        if (!elp)
-            return (PTA *)ERROR_PTR("heap broken!!", procName, NULL);
+        if (!elp) {
+            L_ERROR("heap broken!!\n", procName);
+            goto cleanup_stuff;
+        }
         x = elp->x;
         y = elp->y;
         if (x == xf && y == yf) {  /* exit condition */
-            FREE(elp);
+            LEPT_FREE(elp);
             break;
         }
         distparent = (l_int32)elp->distance;
@@ -856,7 +859,7 @@ PTA      *pta;
                 lheapAdd(lh, el);
             }
         }
-        FREE(elp);
+        LEPT_FREE(elp);
     }
 
     lheapDestroy(&lh, TRUE);
@@ -899,11 +902,13 @@ PTA      *pta;
         pixSetPixel(pixd, xf, yf, bpixel);
     }
 
+cleanup_stuff:
+    lheapDestroy(&lh, TRUE);
     pixDestroy(&pixp);
     pixDestroy(&pixr);
-    FREE(lines8);
-    FREE(linep8);
-    FREE(liner32);
+    LEPT_FREE(lines8);
+    LEPT_FREE(linep8);
+    LEPT_FREE(liner32);
     return pta;
 }
 
@@ -912,16 +917,18 @@ PTA      *pta;
  *                      Largest rectangle in an image                  *
  *---------------------------------------------------------------------*/
 /*!
- *  pixFindLargestRectangle()
+ * \brief   pixFindLargestRectangle()
  *
- *      Input:  pixs  (1 bpp)
- *              polarity (0 within background, 1 within foreground)
- *              &box (<return> largest rectangle, either by area or
- *                    by perimeter)
- *              debugflag (1 to output image with rectangle drawn on it)
- *      Return: 0 if OK, 1 on error
+ * \param[in]    pixs  1 bpp
+ * \param[in]    polarity 0 within background, 1 within foreground
+ * \param[out]   pbox largest rectangle, either by area or
+ *                    by perimeter
+ * \param[in]    debugfile filename where to write output image with
+                           rectangle drawn on it
+ * \return  0 if OK, 1 on error
  *
- *  Notes:
+ * <pre>
+ * Notes:
  *      (1) Why is this here?  This is a simple and elegant solution to
  *          a problem in computational geometry that at first appears
  *          quite difficult: what is the largest rectangle that can
@@ -959,6 +966,7 @@ PTA      *pta;
  *          where you attempt to extend the rectangle to the right
  *          by 1 pixel, you arrive at (b).  The largest rectangle is
  *          then found by taking the Max.
+ * </pre>
  */
 l_int32
 pixFindLargestRectangle(PIX         *pixs,
@@ -991,7 +999,7 @@ PIX       *pixw, *pixh;  /* keeps the width and height for the largest */
         return ERROR_INT("invalid polarity", procName, 1);
 
         /* Initialize lowest "fg" seen so far for each column */
-    lowestfg = (l_int32 *)CALLOC(w, sizeof(l_int32));
+    lowestfg = (l_int32 *)LEPT_CALLOC(w, sizeof(l_int32));
     for (i = 0; i < w; i++)
         lowestfg[i] = -1;
 
@@ -1013,16 +1021,13 @@ PIX       *pixw, *pixh;  /* keeps the width and height for the largest */
             if ((val ^ polarity) == 0) {  /* bg (0) if polarity == 0, etc. */
                 if (i == 0 && j == 0) {
                     wp = hp = 1;
-                }
-                else if (i == 0) {
+                } else if (i == 0) {
                     wp = linew[i][j - 1] + 1;
                     hp = 1;
-                }
-                else if (j == 0) {
+                } else if (j == 0) {
                     wp = 1;
                     hp = lineh[i - 1][j] + 1;
-                }
-                else {
+                } else {
                         /* Expand #1 prev rectangle down */
                     w1 = linew[i - 1][j];
                     h1 = lineh[i - 1][j];
@@ -1040,14 +1045,12 @@ PIX       *pixw, *pixh;  /* keeps the width and height for the largest */
                     if (area1 > area2) {
                          wp = wmin;
                          hp = h1 + 1;
-                    }
-                    else {
+                    } else {
                          wp = w2 + 1;
                          hp = hmin;
                     }
                 }
-            }
-            else {  /* fg (1) if polarity == 0; bg (0) if polarity == 1 */
+            } else {  /* fg (1) if polarity == 0; bg (0) if polarity == 1 */
                 prevfg = j;
                 lowestfg[j] = i;
                 wp = hp = 0;
@@ -1076,9 +1079,9 @@ PIX       *pixw, *pixh;  /* keeps the width and height for the largest */
         pixDestroy(&pixdb);
     }
 
-    FREE(linew);
-    FREE(lineh);
-    FREE(lowestfg);
+    LEPT_FREE(linew);
+    LEPT_FREE(lineh);
+    LEPT_FREE(lowestfg);
     pixDestroy(&pixw);
     pixDestroy(&pixh);
     return 0;

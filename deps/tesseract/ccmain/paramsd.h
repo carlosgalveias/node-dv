@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////
-// File:        paramsd.cpp
+// File:        paramsd.h
 // Description: Tesseract parameter editor
 // Author:      Joern Wanke
 // Created:     Wed Jul 18 10:05:01 PDT 2007
@@ -19,12 +19,12 @@
 //
 // Tesseract parameter editor is used to edit all the parameters used
 // within tesseract from the ui.
+#ifndef TESSERACT_CCMAIN_PARAMSD_H_
+#define TESSERACT_CCMAIN_PARAMSD_H_
+
 #ifndef GRAPHICS_DISABLED
-#ifndef VARABLED_H
-#define VARABLED_H
 
 #include "elst.h"
-#include "scrollview.h"
 #include "params.h"
 #include "tesseractclass.h"
 
@@ -54,15 +54,15 @@ class ParamContent : public ELIST_LINK {
   // Constructors for the various ParamTypes.
   ParamContent() {
   }
-  ParamContent(tesseract::StringParam* it);
-  ParamContent(tesseract::IntParam* it);
-  ParamContent(tesseract::BoolParam* it);
-  ParamContent(tesseract::DoubleParam* it);
+  explicit ParamContent(tesseract::StringParam* it);
+  explicit ParamContent(tesseract::IntParam* it);
+  explicit ParamContent(tesseract::BoolParam* it);
+  explicit ParamContent(tesseract::DoubleParam* it);
 
 
   // Getters and Setters.
   void SetValue(const char* val);
-  const char* GetValue() const;
+  STRING GetValue() const;
   const char* GetName() const;
   const char* GetDescription() const;
 
@@ -93,7 +93,7 @@ class ParamsEditor : public SVEventHandler {
   // Integrate the parameters editor as popupmenu into the existing scrollview
   // window (usually the pg editor). If sv == null, create a new empty
   // empty window and attach the parameter editor to that window (ugly).
-  ParamsEditor(tesseract::Tesseract*, ScrollView* sv = NULL);
+  explicit ParamsEditor(tesseract::Tesseract*, ScrollView* sv = NULL);
 
   // Event listener. Waits for SVET_POPUP events and processes them.
   void Notify(const SVEvent* sve);
@@ -120,5 +120,5 @@ class ParamsEditor : public SVEventHandler {
   ScrollView* sv_window_;
 };
 
-#endif
-#endif
+#endif  // GRAPHICS_DISABLED
+#endif  // TESSERACT_CCMAIN_PARAMSD_H_

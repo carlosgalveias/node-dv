@@ -31,6 +31,22 @@ namespace tesseract {
 
 class BitVector;
 
+// Simple struct to hold a font and a score. The scores come from the low-level
+// integer matcher, so they are in the uinT16 range. Fonts are an index to
+// fontinfo_table.
+// These get copied around a lot, so best to keep them small.
+struct ScoredFont {
+  ScoredFont() : fontinfo_id(-1), score(0) {}
+  ScoredFont(int font_id, uinT16 classifier_score)
+      : fontinfo_id(font_id), score(classifier_score) {}
+
+  // Index into fontinfo table, but inside the classifier, may be a shapetable
+  // index.
+  inT32 fontinfo_id;
+  // Raw score from the low-level classifier.
+  uinT16 score;
+};
+
 // Struct for information about spacing between characters in a particular font.
 struct FontSpacingInfo {
   inT16 x_gap_before;
@@ -51,7 +67,7 @@ struct FontInfo {
   bool Serialize(FILE* fp) const;
   // Reads from the given file. Returns false in case of error.
   // If swap is true, assumes a big/little-endian swap is needed.
-  bool DeSerialize(bool swap, FILE* fp);
+  bool DeSerialize(TFile* fp);
 
   // Reserves unicharset_size spots in spacing_vec.
   void init_spacing(int unicharset_size) {
@@ -136,15 +152,15 @@ class FontInfoTable : public GenericVector<FontInfo> {
   bool Serialize(FILE* fp) const;
   // Reads from the given file. Returns false in case of error.
   // If swap is true, assumes a big/little-endian swap is needed.
-  bool DeSerialize(bool swap, FILE* fp);
+  bool DeSerialize(TFile* fp);
 
   // Returns true if the given set of fonts includes one with the same
   // properties as font_id.
-  bool SetContainsFontProperties(int font_id,
-                                 const GenericVector<int>& font_set) const;
+  bool SetContainsFontProperties(
+      int font_id, const GenericVector<ScoredFont>& font_set) const;
   // Returns true if the given set of fonts includes multiple properties.
   bool SetContainsMultipleFontProperties(
-      const GenericVector<int>& font_set) const;
+      const GenericVector<ScoredFont>& font_set) const;
 
   // Moves any non-empty FontSpacingInfo entries from other to this.
   void MoveSpacingInfoFrom(FontInfoTable* other);
@@ -161,11 +177,11 @@ void FontInfoDeleteCallback(FontInfo f);
 void FontSetDeleteCallback(FontSet fs);
 
 // Callbacks used by UnicityTable to read/write FontInfo/FontSet structures.
-bool read_info(FILE* f, FontInfo* fi, bool swap);
+bool read_info(TFile* f, FontInfo* fi);
 bool write_info(FILE* f, const FontInfo& fi);
-bool read_spacing_info(FILE *f, FontInfo* fi, bool swap);
+bool read_spacing_info(TFile* f, FontInfo* fi);
 bool write_spacing_info(FILE* f, const FontInfo& fi);
-bool read_set(FILE* f, FontSet* fs, bool swap);
+bool read_set(TFile* f, FontSet* fs);
 bool write_set(FILE* f, const FontSet& fs);
 
 }  // namespace tesseract.

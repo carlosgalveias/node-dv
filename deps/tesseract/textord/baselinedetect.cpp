@@ -108,7 +108,7 @@ double BaselineRow::BaselineAngle() const {
 double BaselineRow::SpaceBetween(const BaselineRow& other) const {
   // Find the x-centre of overlap of the lines.
   float x = (MAX(bounding_box_.left(), other.bounding_box_.left()) +
-      MIN(bounding_box_.right(), other.bounding_box_.right())) / 2;
+      MIN(bounding_box_.right(), other.bounding_box_.right())) / 2.0f;
   // Find the vertical centre between them.
   float y = (StraightYAtX(x) + other.StraightYAtX(x)) / 2.0f;
   // Find the perpendicular distance of (x,y) from each line.
@@ -782,11 +782,9 @@ double BaselineBlock::FitLineSpacingModel(
   return rms_error;
 }
 
-
 BaselineDetect::BaselineDetect(int debug_level, const FCOORD& page_skew,
                                TO_BLOCK_LIST* blocks)
-    : page_skew_(page_skew), debug_level_(debug_level), pix_debug_(NULL),
-      debug_file_prefix_("") {
+    : page_skew_(page_skew), debug_level_(debug_level) {
   TO_BLOCK_IT it(blocks);
   for (it.mark_cycle_pt(); !it.cycled_list(); it.forward()) {
     TO_BLOCK* to_block = it.data();
@@ -804,7 +802,6 @@ BaselineDetect::BaselineDetect(int debug_level, const FCOORD& page_skew,
 }
 
 BaselineDetect::~BaselineDetect() {
-  pixDestroy(&pix_debug_);
 }
 
 // Finds the initial baselines for each TO_ROW in each TO_BLOCK, gathers
@@ -847,30 +844,15 @@ void BaselineDetect::ComputeBaselineSplinesAndXheights(const ICOORD& page_tr,
                                                        bool remove_noise,
                                                        bool show_final_rows,
                                                       Textord* textord) {
-  Pix* pix_spline = pix_debug_ ? pixConvertTo32(pix_debug_) : NULL;
   for (int i = 0; i < blocks_.size(); ++i) {
     BaselineBlock* bl_block = blocks_[i];
-    bl_block->PrepareForSplineFitting(page_tr, remove_noise);
+    if (enable_splines)
+      bl_block->PrepareForSplineFitting(page_tr, remove_noise);
     bl_block->FitBaselineSplines(enable_splines, show_final_rows, textord);
-    if (pix_spline) {
-      bl_block->DrawPixSpline(pix_spline);
-    }
     if (show_final_rows) {
       bl_block->DrawFinalRows(page_tr);
     }
   }
-
-  if (pix_spline) {
-    STRING outfile_name = debug_file_prefix_ + "_spline.png";
-    pixWrite(outfile_name.string(), pix_spline, IFF_PNG);
-    pixDestroy(&pix_spline);
-  }
-}
-
-void BaselineDetect::SetDebugImage(Pix* pixIn, const STRING& output_path) {
-  pixDestroy(&pix_debug_);
-  pix_debug_ = pixClone(pixIn);
-  debug_file_prefix_ = output_path;
 }
 
 }  // namespace tesseract.

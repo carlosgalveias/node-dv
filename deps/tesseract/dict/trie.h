@@ -87,8 +87,9 @@ class Trie : public Dawg {
   // contain more edges than max_num_edges, all the edges are cleared
   // so that new inserts can proceed).
   Trie(DawgType type, const STRING &lang, PermuterType perm,
-       int unicharset_size, int debug_level) {
-    init(type, lang, perm, unicharset_size, debug_level);
+       int unicharset_size, int debug_level)
+      : Dawg(type, lang, perm, debug_level) {
+    init(unicharset_size);
     num_edges_ = 0;
     deref_node_index_mask_ = ~letter_mask_;
     new_dawg_node();  // need to allocate node 0
@@ -148,9 +149,14 @@ class Trie : public Dawg {
     if (edge_ref == NO_EDGE || num_edges_ == 0) return INVALID_UNICHAR_ID;
     return unichar_id_from_edge_rec(*deref_edge_ref(edge_ref));
   }
-  // Sets the UNICHAR_ID in the given edge_rec to 0, marking the edge dead.
+  // Sets the UNICHAR_ID in the given edge_rec to unicharset_size_, marking
+  // the edge dead.
   void KillEdge(EDGE_RECORD* edge_rec) const {
     *edge_rec &= ~letter_mask_;
+    *edge_rec |= (unicharset_size_ << LETTER_START_BIT);
+  }
+  bool DeadEdge(const EDGE_RECORD& edge_rec) const {
+    return unichar_id_from_edge_rec(edge_rec) == unicharset_size_;
   }
 
   // Prints the contents of the node indicated by the given NODE_REF.
@@ -171,18 +177,16 @@ class Trie : public Dawg {
                               const UNICHARSET &unicharset,
                               Trie::RTLReversePolicy reverse);
 
-  // Reads a list of words from the given file, applying the reverse_policy,
-  // according to information in the unicharset.
+  // Reads a list of words from the given file.
   // Returns false on error.
   bool read_word_list(const char *filename,
-                      const UNICHARSET &unicharset,
-                      Trie::RTLReversePolicy reverse_policy,
                       GenericVector<STRING>* words);
   // Adds a list of words previously read using read_word_list to the trie
-  // using the given unicharset to convert to unichar-ids.
+  // using the given unicharset and reverse_policy to convert to unichar-ids.
   // Returns false on error.
-  bool add_word_list(const GenericVector<STRING>& words,
-                     const UNICHARSET &unicharset);
+  bool add_word_list(const GenericVector<STRING> &words,
+                     const UNICHARSET &unicharset,
+                     Trie::RTLReversePolicy reverse_policy);
 
   // Inserts the list of patterns from the given file into the Trie.
   // The pattern list file should contain one pattern per line in UTF-8 format.
@@ -397,7 +401,7 @@ class Trie : public Dawg {
                              EDGE_VECTOR* backward_edges,
                              NODE_MARKER reduced_nodes);
 
-  /** 
+  /**
    * Order num_edges of consequtive EDGE_RECORDS in the given EDGE_VECTOR in
    * increasing order of unichar ids. This function is normally called
    * for all edges in a single node, and since number of edges in each node

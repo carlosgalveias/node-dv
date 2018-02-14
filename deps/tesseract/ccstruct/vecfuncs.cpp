@@ -1,7 +1,7 @@
 /* -*-C-*-
  ********************************************************************************
  *
- * File:        vecfuncs.c  (Formerly vecfuncs.c)
+ * File:         vecfuncs.cpp  (Formerly vecfuncs.c)
  * Description:  Blob definition
  * Author:       Mark Seaman, OCR Technology
  * Created:      Fri Oct 27 15:39:52 1989
@@ -23,13 +23,14 @@
  *
  ********************************************************************************
  * Revision 5.1  89/07/27  11:47:50  11:47:50  ray ()
- * Added ratings acces methods.
+ * Added ratings access methods.
  * This version ready for independent development.
  */
 /*----------------------------------------------------------------------
               I n c l u d e s
 ----------------------------------------------------------------------*/
 #include "vecfuncs.h"
+#include "blobs.h"
 
 /*----------------------------------------------------------------------
               F u n c t i o n s

@@ -1,7 +1,7 @@
 /* -*-C-*-
  ********************************************************************************
  *
- * File:        render.c  (Formerly render.c)
+ * File:         render.cpp  (Formerly render.c)
  * Description:  Convert the various data type into line lists
  * Author:       Mark Seaman, OCR Technology
  * Created:      Fri Jul 28 13:14:48 1989
@@ -96,12 +96,12 @@ void render_blob(void *window, TBLOB *blob, C_COL color) {
  * that was supplied as input.
  **********************************************************************/
 void render_edgepts(void *window, EDGEPT *edgept, C_COL color) {
+  if (!edgept)
+    return;
+
   float x = edgept->pos.x;
   float y = edgept->pos.y;
   EDGEPT *this_edge = edgept;
-
-  if (!edgept)
-    return;
 
   c_line_color_index(window, color);
   c_move(window, x, y);

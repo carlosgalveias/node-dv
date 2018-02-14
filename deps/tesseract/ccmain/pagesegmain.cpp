@@ -18,9 +18,6 @@
  **********************************************************************/
 
 #ifdef _WIN32
-#ifndef __GNUC__
-#include <windows.h>
-#endif  // __GNUC__
 #ifndef unlink
 #include <io.h>
 #endif
@@ -40,6 +37,7 @@
 #include "blobbox.h"
 #include "blread.h"
 #include "colfind.h"
+#include "debugpixa.h"
 #include "equationdetect.h"
 #include "imagefind.h"
 #include "linefind.h"
@@ -54,10 +52,6 @@
 
 namespace tesseract {
 
-/// Minimum believable resolution.
-const int kMinCredibleResolution = 70;
-/// Default resolution used if input in not believable.
-const int kDefaultResolution = 300;
 // Max erosions to perform in removing an enclosing circle.
 const int kMaxCircleErosions = 8;
 
@@ -134,12 +128,20 @@ int Tesseract::SegmentPage(const STRING* input_file, BLOCK_LIST* blocks,
     // UNLV file present. Use PSM_SINGLE_BLOCK.
     pageseg_mode = PSM_SINGLE_BLOCK;
   }
+  // The diacritic_blobs holds noise blobs that may be diacritics. They
+  // are separated out on areas of the image that seem noisy and short-circuit
+  // the layout process, going straight from the initial partition creation
+  // right through to after word segmentation, where they are added to the
+  // rej_cblobs list of the most appropriate word. From there classification
+  // will determine whether they are used.
+  BLOBNBOX_LIST diacritic_blobs;
   int auto_page_seg_ret_val = 0;
   TO_BLOCK_LIST to_blocks;
   if (PSM_OSD_ENABLED(pageseg_mode) || PSM_BLOCK_FIND_ENABLED(pageseg_mode) ||
       PSM_SPARSE(pageseg_mode)) {
-    auto_page_seg_ret_val =
-        AutoPageSeg(pageseg_mode, blocks, &to_blocks, osd_tess, osr);
+    auto_page_seg_ret_val = AutoPageSeg(
+        pageseg_mode, blocks, &to_blocks,
+        enable_noise_removal ? &diacritic_blobs : NULL, osd_tess, osr);
     if (pageseg_mode == PSM_OSD_ONLY)
       return auto_page_seg_ret_val;
     // To create blobs from the image region bounds uncomment this line:
@@ -171,32 +173,9 @@ int Tesseract::SegmentPage(const STRING* input_file, BLOCK_LIST* blocks,
 
   textord_.TextordPage(pageseg_mode, reskew_, width, height, pix_binary_,
                        pix_thresholds_, pix_grey_, splitting || cjk_mode,
-                       blocks, &to_blocks);
+                       &diacritic_blobs, blocks, &to_blocks);
   return auto_page_seg_ret_val;
 }
-
-// Helper writes a grey image to a file for use by scrollviewer.
-// Normally for speed we don't display the image in the layout debug windows.
-// If textord_debug_images is true, we draw the image as a background to some
-// of the debug windows. printable determines whether these
-// images are optimized for printing instead of screen display.
-static void WriteDebugBackgroundImage(bool printable, Pix* pix_binary) {
-  Pix* grey_pix = pixCreate(pixGetWidth(pix_binary),
-                            pixGetHeight(pix_binary), 8);
-  // Printable images are light grey on white, but for screen display
-  // they are black on dark grey so the other colors show up well.
-  if (printable) {
-    pixSetAll(grey_pix);
-    pixSetMasked(grey_pix, pix_binary, 192);
-  } else {
-    pixSetAllArbitrary(grey_pix, 64);
-    pixSetMasked(grey_pix, pix_binary, 0);
-  }
-  AlignedBlob::IncrementDebugPix();
-  pixWrite(AlignedBlob::textord_debug_pix().string(), grey_pix, IFF_PNG);
-  pixDestroy(&grey_pix);
-}
-
 
 /**
  * Auto page segmentation. Divide the page image into blocks of uniform
@@ -207,9 +186,14 @@ static void WriteDebugBackgroundImage(bool printable, Pix* pix_binary) {
  * The output goes in the blocks list with corresponding TO_BLOCKs in the
  * to_blocks list.
  *
- * If single_column is true, then no attempt is made to divide the image
- * into columns, but multiple blocks are still made if the text is of
- * non-uniform linespacing.
+ * If !PSM_COL_FIND_ENABLED(pageseg_mode), then no attempt is made to divide
+ * the image into columns, but multiple blocks are still made if the text is
+ * of non-uniform linespacing.
+ *
+ * If diacritic_blobs is non-null, then diacritics/noise blobs, that would
+ * confuse layout anaylsis by causing textline overlap, are placed there,
+ * with the expectation that they will be reassigned to words later and
+ * noise/diacriticness determined via classification.
  *
  * If osd (orientation and script detection) is true then that is performed
  * as well. If only_osd is true, then only orientation and script detection is
@@ -217,24 +201,19 @@ static void WriteDebugBackgroundImage(bool printable, Pix* pix_binary) {
  * another Tesseract that was initialized especially for osd, and the results
  * will be output into osr (orientation and script result).
  */
-int Tesseract::AutoPageSeg(PageSegMode pageseg_mode,
-                           BLOCK_LIST* blocks, TO_BLOCK_LIST* to_blocks,
-                           Tesseract* osd_tess, OSResults* osr) {
-  if (textord_debug_images) {
-    WriteDebugBackgroundImage(textord_debug_printable, pix_binary_);
-  }
+int Tesseract::AutoPageSeg(PageSegMode pageseg_mode, BLOCK_LIST* blocks,
+                           TO_BLOCK_LIST* to_blocks,
+                           BLOBNBOX_LIST* diacritic_blobs, Tesseract* osd_tess,
+                           OSResults* osr) {
   Pix* photomask_pix = NULL;
   Pix* musicmask_pix = NULL;
   // The blocks made by the ColumnFinder. Moved to blocks before return.
   BLOCK_LIST found_blocks;
   TO_BLOCK_LIST temp_blocks;
 
-  bool single_column = !PSM_COL_FIND_ENABLED(pageseg_mode);
-  bool osd_enabled = PSM_OSD_ENABLED(pageseg_mode);
-  bool osd_only = pageseg_mode == PSM_OSD_ONLY;
   ColumnFinder* finder = SetupPageSegAndDetectOrientation(
-      single_column, osd_enabled, osd_only, blocks, osd_tess, osr,
-      &temp_blocks, &photomask_pix, &musicmask_pix);
+      pageseg_mode, blocks, osd_tess, osr, &temp_blocks, &photomask_pix,
+      &musicmask_pix);
   int result = 0;
   if (finder != NULL) {
     TO_BLOCK_IT to_block_it(&temp_blocks);
@@ -248,9 +227,9 @@ int Tesseract::AutoPageSeg(PageSegMode pageseg_mode,
       finder->SetEquationDetect(equ_detect_);
     }
     result = finder->FindBlocks(pageseg_mode, scaled_color_, scaled_factor_,
-                                to_block, photomask_pix,
-                                pix_thresholds_, pix_grey_,
-                                &found_blocks, to_blocks);
+                                to_block, photomask_pix, pix_thresholds_,
+                                pix_grey_, &pixa_debug_, &found_blocks,
+                                diacritic_blobs, to_blocks);
     if (result >= 0)
       finder->GetDeskewVectors(&deskew_, &reskew_);
     delete finder;
@@ -263,11 +242,6 @@ int Tesseract::AutoPageSeg(PageSegMode pageseg_mode,
   BLOCK_IT block_it(blocks);
   // Move the found blocks to the input/output blocks.
   block_it.add_list_after(&found_blocks);
-
-  if (textord_debug_images) {
-    // The debug image is no longer needed so delete it.
-    unlink(AlignedBlob::textord_debug_pix().string());
-  }
   return result;
 }
 
@@ -298,9 +272,9 @@ static void AddAllScriptsConverted(const UNICHARSET& sid_set,
  * The returned ColumnFinder must be deleted after use.
  */
 ColumnFinder* Tesseract::SetupPageSegAndDetectOrientation(
-    bool single_column, bool osd, bool only_osd,
-    BLOCK_LIST* blocks, Tesseract* osd_tess, OSResults* osr,
-    TO_BLOCK_LIST* to_blocks, Pix** photo_mask_pix, Pix** music_mask_pix) {
+    PageSegMode pageseg_mode, BLOCK_LIST* blocks, Tesseract* osd_tess,
+    OSResults* osr, TO_BLOCK_LIST* to_blocks, Pix** photo_mask_pix,
+    Pix** music_mask_pix) {
   int vertical_x = 0;
   int vertical_y = 1;
   TabVector_LIST v_lines;
@@ -309,21 +283,22 @@ ColumnFinder* Tesseract::SetupPageSegAndDetectOrientation(
 
   ASSERT_HOST(pix_binary_ != NULL);
   if (tessedit_dump_pageseg_images) {
-    pixWrite("tessinput.png", pix_binary_, IFF_PNG);
+    pixa_debug_.AddPix(pix_binary_, "PageSegInput");
   }
   // Leptonica is used to find the rule/separator lines in the input.
   LineFinder::FindAndRemoveLines(source_resolution_,
                                  textord_tabfind_show_vlines, pix_binary_,
                                  &vertical_x, &vertical_y, music_mask_pix,
                                  &v_lines, &h_lines);
-  if (tessedit_dump_pageseg_images)
-    pixWrite("tessnolines.png", pix_binary_, IFF_PNG);
+  if (tessedit_dump_pageseg_images) {
+    pixa_debug_.AddPix(pix_binary_, "NoLines");
+  }
   // Leptonica is used to find a mask of the photo regions in the input.
-  *photo_mask_pix = ImageFind::FindImages(pix_binary_);
-  if (tessedit_dump_pageseg_images)
-    pixWrite("tessnoimages.png", pix_binary_, IFF_PNG);
-  if (single_column)
-    v_lines.clear();
+  *photo_mask_pix = ImageFind::FindImages(pix_binary_, &pixa_debug_);
+  if (tessedit_dump_pageseg_images) {
+    pixa_debug_.AddPix(pix_binary_, "NoImages");
+  }
+  if (!PSM_COL_FIND_ENABLED(pageseg_mode)) v_lines.clear();
 
   // The rest of the algorithm uses the usual connected components.
   textord_.find_components(pix_binary_, blocks, to_blocks);
@@ -335,14 +310,24 @@ ColumnFinder* Tesseract::SetupPageSegAndDetectOrientation(
   TO_BLOCK* to_block = to_block_it.data();
   TBOX blkbox = to_block->block->bounding_box();
   ColumnFinder* finder = NULL;
+  int estimated_resolution = source_resolution_;
+  if (source_resolution_ == kMinCredibleResolution) {
+    // Try to estimate resolution from typical body text size.
+    int res = IntCastRounded(to_block->line_size * kResolutionEstimationFactor);
+    if (res > estimated_resolution && res < kMaxCredibleResolution) {
+      estimated_resolution = res;
+      tprintf("Estimating resolution as %d\n", estimated_resolution);
+    }
+  }
 
   if (to_block->line_size >= 2) {
     finder = new ColumnFinder(static_cast<int>(to_block->line_size),
                               blkbox.botleft(), blkbox.topright(),
-                              source_resolution_, textord_use_cjk_fp_model,
-                              &v_lines, &h_lines, vertical_x, vertical_y);
+                              estimated_resolution, textord_use_cjk_fp_model,
+                              textord_tabfind_aligned_gap_fraction, &v_lines,
+                              &h_lines, vertical_x, vertical_y);
 
-    finder->SetupAndFilterNoise(*photo_mask_pix, to_block);
+    finder->SetupAndFilterNoise(pageseg_mode, *photo_mask_pix, to_block);
 
     if (equ_detect_) {
       equ_detect_->LabelSpecialText(to_block);
@@ -354,8 +339,15 @@ ColumnFinder* Tesseract::SetupPageSegAndDetectOrientation(
     // We want the text lines horizontal, (vertical text indicates vertical
     // textlines) which may conflict (eg vertically written CJK).
     int osd_orientation = 0;
-    bool vertical_text = finder->IsVerticallyAlignedText(to_block, &osd_blobs);
-    if (osd && osd_tess != NULL && osr != NULL) {
+    bool vertical_text = textord_tabfind_force_vertical_text ||
+                         pageseg_mode == PSM_SINGLE_BLOCK_VERT_TEXT;
+    if (!vertical_text && textord_tabfind_vertical_text &&
+        PSM_ORIENTATION_ENABLED(pageseg_mode)) {
+      vertical_text =
+          finder->IsVerticallyAlignedText(textord_tabfind_vertical_text_ratio,
+                                          to_block, &osd_blobs);
+    }
+    if (PSM_OSD_ENABLED(pageseg_mode) && osd_tess != NULL && osr != NULL) {
       GenericVector<int> osd_scripts;
       if (osd_tess != this) {
         // We are running osd as part of layout analysis, so constrain the
@@ -367,7 +359,7 @@ ColumnFinder* Tesseract::SetupPageSegAndDetectOrientation(
         }
       }
       os_detect_blobs(&osd_scripts, &osd_blobs, osr, osd_tess);
-      if (only_osd) {
+      if (pageseg_mode == PSM_OSD_ONLY) {
         delete finder;
         return NULL;
       }
@@ -400,9 +392,10 @@ ColumnFinder* Tesseract::SetupPageSegAndDetectOrientation(
                   "Don't rotate.\n", osd_margin);
           osd_orientation = 0;
         } else {
-          tprintf("OSD: Weak margin (%.2f) for %d blob text block, "
-                  "but using orientation anyway: %d\n",
-                  osd_blobs.length(), osd_margin, osd_orientation);
+          tprintf(
+              "OSD: Weak margin (%.2f) for %d blob text block, "
+              "but using orientation anyway: %d\n",
+              osd_margin, osd_blobs.length(), osd_orientation);
         }
       }
     }

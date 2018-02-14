@@ -24,8 +24,9 @@
  -  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *====================================================================*/
 
-/*
- *  webpio.c
+/*!
+ * \file webpio.c
+ * <pre>
  *
  *    Reading WebP
  *          PIX             *pixReadStreamWebP()
@@ -33,18 +34,20 @@
  *
  *    Reading WebP header
  *          l_int32          readHeaderWebP()
+ *          l_int32          readHeaderMemWebP()
  *
  *    Writing WebP
  *          l_int32          pixWriteWebP()  [ special top level ]
  *          l_int32          pixWriteStreamWebP()
  *          l_int32          pixWriteMemWebP()
+ * </pre>
  */
-
-#include "allheaders.h"
 
 #ifdef HAVE_CONFIG_H
 #include "config_auto.h"
 #endif  /* HAVE_CONFIG_H */
+
+#include "allheaders.h"
 
 /* --------------------------------------------*/
 #if  HAVE_LIBWEBP   /* defined in environ.h */
@@ -56,10 +59,10 @@
  *                             Reading WebP                            *
  *---------------------------------------------------------------------*/
 /*!
- *  pixReadStreamWebP()
+ * \brief   pixReadStreamWebP()
  *
- *      Input:  stream corresponding to WebP image
- *      Return: pix (32 bpp), or null on error
+ * \param[in]    fp file stream corresponding to WebP image
+ * \return  pix 32 bpp, or NULL on error
  */
 PIX *
 pixReadStreamWebP(FILE  *fp)
@@ -79,19 +82,20 @@ PIX      *pix;
         return (PIX *)ERROR_PTR("filedata not read", procName, NULL);
 
     pix = pixReadMemWebP(filedata, filesize);
-    FREE(filedata);
+    LEPT_FREE(filedata);
     return pix;
 }
 
 
 /*!
- *  pixReadMemWebP()
+ * \brief   pixReadMemWebP()
  *
- *      Input:  filedata (webp compressed data in memory)
- *              filesize (number of bytes in data)
- *      Return: pix (32 bpp), or null on error
+ * \param[in]    filedata webp compressed data in memory
+ * \param[in]    filesize number of bytes in data
+ * \return  pix 32 bpp, or NULL on error
  *
- *  Notes:
+ * <pre>
+ * Notes:
  *      (1) When the encoded data only has 3 channels (no alpha),
  *          WebPDecodeRGBAInto() generates a raster of 32-bit pixels, with
  *          the alpha channel set to opaque (255).
@@ -100,6 +104,7 @@ PIX      *pix;
  *          the webp library has been written with memory-to-memory
  *          functions at the lowest level (which is good!).  And, in
  *          any event, fmemopen() doesn't work with l_binaryReadStream().
+ * </pre>
  */
 PIX *
 pixReadMemWebP(const l_uint8  *filedata,
@@ -125,6 +130,7 @@ WebPBitstreamFeatures  features;
 
         /* Write from compressed Y,U,V arrays to pix raster data */
     pix = pixCreate(w, h, 32);
+    pixSetInputFormat(pix, IFF_WEBP);
     if (has_alpha) pixSetSpp(pix, 4);
     data = pixGetData(pix);
     wpl = pixGetWpl(pix);
@@ -144,13 +150,13 @@ WebPBitstreamFeatures  features;
 
 
 /*!
- *  readHeaderWebP()
+ * \brief   readHeaderWebP()
  *
- *      Input:  filename
- *              &w (<return> width)
- *              &h (<return> height)
- *              &spp (<return> spp (3 or 4))
- *      Return: 0 if OK, 1 on error
+ * \param[in]    filename
+ * \param[out]   pw width
+ * \param[out]   ph height
+ * \param[out]   pspp spp (3 or 4)
+ * \return  0 if OK, 1 on error
  */
 l_int32
 readHeaderWebP(const char *filename,
@@ -162,7 +168,6 @@ l_uint8  data[100];  /* expect size info within the first 50 bytes or so */
 l_int32  nbytes, bytesread;
 size_t   filesize;
 FILE    *fp;
-WebPBitstreamFeatures  features;
 
     PROCNAME("readHeaderWebP");
 
@@ -185,7 +190,40 @@ WebPBitstreamFeatures  features;
     if (bytesread != nbytes)
         return ERROR_INT("failed to read requested data", procName, 1);
 
-    if (WebPGetFeatures(data, nbytes, &features))
+    return readHeaderMemWebP(data, nbytes, pw, ph, pspp);
+}
+
+
+/*!
+ * \brief   readHeaderMemWebP()
+ *
+ * \param[in]    data
+ * \param[in]    size 100 bytes is sufficient
+ * \param[out]   pw width
+ * \param[out]   ph height
+ * \param[out]   pspp spp (3 or 4)
+ * \return  0 if OK, 1 on error
+ */
+l_int32
+readHeaderMemWebP(const l_uint8  *data,
+                  size_t          size,
+                  l_int32        *pw,
+                  l_int32        *ph,
+                  l_int32        *pspp)
+{
+WebPBitstreamFeatures  features;
+
+    PROCNAME("readHeaderWebP");
+
+    if (pw) *pw = 0;
+    if (ph) *ph = 0;
+    if (pspp) *pspp = 0;
+    if (!data)
+        return ERROR_INT("data not defined", procName, 1);
+    if (!pw || !ph || !pspp)
+        return ERROR_INT("input ptr(s) not defined", procName, 1);
+
+    if (WebPGetFeatures(data, (l_int32)size, &features))
         return ERROR_INT("invalid WebP file", procName, 1);
     *pw = features.width;
     *ph = features.height;
@@ -198,16 +236,18 @@ WebPBitstreamFeatures  features;
  *                            Writing WebP                             *
  *---------------------------------------------------------------------*/
 /*!
- *  pixWriteWebP()
+ * \brief   pixWriteWebP()
  *
- *      Input:  filename
- *              pixs
- *              quality (0 - 100; default ~80)
- *              lossless (use 1 for lossless; 0 for lossy)
- *      Return: 0 if OK, 1 on error
+ * \param[in]    filename
+ * \param[in]    pixs
+ * \param[in]    quality 0 - 100; default ~80
+ * \param[in]    lossless use 1 for lossless; 0 for lossy
+ * \return  0 if OK, 1 on error
  *
- *  Notes:
+ * <pre>
+ * Notes:
  *      (1) Special top-level function allowing specification of quality.
+ * </pre>
  */
 l_int32
 pixWriteWebP(const char  *filename,
@@ -236,18 +276,20 @@ FILE  *fp;
 
 
 /*!
- *  pixWriteStreampWebP()
+ * \brief   pixWriteStreampWebP()
  *
- *      Input:  stream
- *              pixs  (all depths)
- *              quality (0 - 100; default ~80)
- *              lossless (use 1 for lossless; 0 for lossy)
- *      Return: 0 if OK, 1 on error
+ * \param[in]    fp file stream
+ * \param[in]    pixs  all depths
+ * \param[in]    quality 0 - 100; default ~80
+ * \param[in]    lossless use 1 for lossless; 0 for lossy
+ * \return  0 if OK, 1 on error
  *
- *  Notes:
+ * <pre>
+ * Notes:
  *      (1) See pixWriteMemWebP() for details.
- *      (2) Use 'free', and not leptonica's 'FREE', for all heap data
+ *      (2) Use 'free', and not leptonica's 'LEPT_FREE', for all heap data
  *          that is returned from the WebP library.
+ * </pre>
  */
 l_int32
 pixWriteStreamWebP(FILE    *fp,
@@ -276,22 +318,24 @@ size_t    filebytes, nbytes;
 
 
 /*!
- *  pixWriteMemWebP()
+ * \brief   pixWriteMemWebP()
  *
- *      Input:  &encdata (<return> webp encoded data of pixs)
- *              &encsize (<return> size of webp encoded data)
- *              pixs (any depth, cmapped OK)
- *              quality (0 - 100; default ~80)
- *              lossless (use 1 for lossless; 0 for lossy)
- *      Return: 0 if OK, 1 on error
+ * \param[out]   pencdata webp encoded data of pixs
+ * \param[out]   pencsize size of webp encoded data
+ * \param[in]    pixs any depth, cmapped OK
+ * \param[in]    quality 0 - 100; default ~80
+ * \param[in]    lossless use 1 for lossless; 0 for lossy
+ * \return  0 if OK, 1 on error
  *
- *  Notes:
+ * <pre>
+ * Notes:
  *      (1) Lossless and lossy encoding are entirely different in webp.
- *          @quality applies to lossy, and is ignored for lossless.
+ *          %quality applies to lossy, and is ignored for lossless.
  *      (2) The input image is converted to RGB if necessary.  If spp == 3,
  *          we set the alpha channel to fully opaque (255), and
  *          WebPEncodeRGBA() then removes the alpha chunk when encoding,
  *          setting the internal header field has_alpha to 0.
+ * </pre>
  */
 l_int32
 pixWriteMemWebP(l_uint8  **pencdata,

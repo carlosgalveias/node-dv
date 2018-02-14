@@ -137,6 +137,9 @@ class BLOBNBOX:public ELIST_LINK
       cblob_ptr = srcblob;
       area = static_cast<int>(srcblob->area());
     }
+    ~BLOBNBOX() {
+      if (owns_cblob_) delete cblob_ptr;
+    }
     static BLOBNBOX* RealBlob(C_OUTLINE* outline) {
       C_BLOB* blob = new C_BLOB(outline);
       return new BLOBNBOX(blob);
@@ -230,7 +233,7 @@ class BLOBNBOX:public ELIST_LINK
     }
     void set_reduced_box(TBOX new_box) {
       red_box = new_box;
-      reduced = TRUE;
+      reduced = true;
     }
     inT32 enclosed_area() const {
       return area;
@@ -387,6 +390,7 @@ class BLOBNBOX:public ELIST_LINK
     void set_base_char_blob(BLOBNBOX* blob) {
       base_char_blob_ = blob;
     }
+    void set_owns_cblob(bool value) { owns_cblob_ = value; }
 
     bool UniquelyVertical() const {
       return vert_possible_ && !horz_possible_;
@@ -450,6 +454,7 @@ class BLOBNBOX:public ELIST_LINK
   // construction time.
   void ConstructionInit() {
     cblob_ptr = NULL;
+    owns_cblob_ = false;
     area = 0;
     area_stroke_width_ = 0.0f;
     horz_stroke_width_ = 0.0f;
@@ -498,8 +503,8 @@ class BLOBNBOX:public ELIST_LINK
   TBOX box;                     // bounding box
   TBOX red_box;                 // bounding box
   int area:30;                  // enclosed area
-  int joined:1;                 // joined to prev
-  int reduced:1;                // reduced box set
+  unsigned joined : 1;          // joined to prev
+  unsigned reduced : 1;         // reduced box set
   int repeated_set_;            // id of the set of repeated blobs
   TabType left_tab_type_;       // Indicates tab-stop assessment
   TabType right_tab_type_;      // Indicates tab-stop assessment
@@ -525,6 +530,10 @@ class BLOBNBOX:public ELIST_LINK
   bool vert_possible_;           // Could be part of vertical flow.
   bool leader_on_left_;          // There is a leader to the left.
   bool leader_on_right_;         // There is a leader to the right.
+  // Iff true, then the destructor should delete the cblob_ptr.
+  // TODO(rays) migrate all uses to correctly setting this flag instead of
+  // deleting the C_BLOB before deleting the BLOBNBOX.
+  bool owns_cblob_;
 };
 
 class TO_ROW: public ELIST2_LINK
@@ -725,8 +734,8 @@ class TO_BLOCK:public ELIST_LINK
       for (row_it.mark_cycle_pt(); !row_it.cycled_list();
            row_it.forward()) {
         row = row_it.data();
-        tprintf("Row range (%g,%g), para_c=%g, blobcount=" INT32FORMAT
-                "\n", row->min_y(), row->max_y(), row->parallel_c(),
+        tprintf("Row range (%g,%g), para_c=%g, blobcount=%" PRId32 "\n",
+                row->min_y(), row->max_y(), row->parallel_c(),
                 row->blob_list()->length());
       }
     }

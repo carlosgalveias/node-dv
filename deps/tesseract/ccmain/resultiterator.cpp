@@ -34,6 +34,13 @@ ResultIterator::ResultIterator(const LTRResultIterator &resit)
     : LTRResultIterator(resit) {
   in_minor_direction_ = false;
   at_beginning_of_minor_run_ = false;
+  preserve_interword_spaces_ = false;
+
+  BoolParam *p = ParamUtils::FindParam<BoolParam>(
+      "preserve_interword_spaces", GlobalParams()->bool_params,
+      tesseract_->params()->bool_params);
+  if (p != NULL) preserve_interword_spaces_ = (bool)(*p);
+
   current_paragraph_is_ltr_ = CurrentParagraphIsLtr();
   MoveToLogicalStartOfTextline();
 }
@@ -542,6 +549,12 @@ bool ResultIterator::IsAtFinalElement(PageIteratorLevel level,
   return true;
 }
 
+// Returns the number of blanks before the current word.
+int ResultIterator::BlanksBeforeWord() const {
+  if (CurrentParagraphIsLtr()) return LTRResultIterator::BlanksBeforeWord();
+  return IsAtBeginningOf(RIL_TEXTLINE) ? 0 : 1;
+}
+
 /**
  * Returns the null terminated UTF-8 encoded text string for the current
  * object at the given level. Use delete [] to free after use.
@@ -578,7 +591,7 @@ char* ResultIterator::GetUTF8Text(PageIteratorLevel level) const {
         if (at_beginning_of_minor_run_) {
           text += reading_direction_is_ltr ? kLRM : kRLM;
         }
-        text = it_->word()->BestUTF8(blob_index_, !reading_direction_is_ltr);
+        text = it_->word()->BestUTF8(blob_index_, false);
         if (IsAtFinalSymbolOfWord()) AppendSuffixMarks(&text);
       }
       break;
@@ -601,7 +614,7 @@ void ResultIterator::AppendUTF8WordText(STRING *text) const {
   GenericVector<int> blob_order;
   CalculateBlobOrder(&blob_order);
   for (int i = 0; i < blob_order.size(); i++) {
-    *text += it_->word()->BestUTF8(blob_order[i], !reading_direction_is_ltr);
+    *text += it_->word()->BestUTF8(blob_order[i], false);
   }
   AppendSuffixMarks(text);
 }
@@ -629,18 +642,25 @@ void ResultIterator::IterateAndAppendUTF8TextlineText(STRING *text) {
 
   int words_appended = 0;
   do {
+    int numSpaces = preserve_interword_spaces_ ? it_->word()->word->space()
+                                               : (words_appended > 0);
+    for (int i = 0; i < numSpaces; ++i) {
+      *text += " ";
+    }
     AppendUTF8WordText(text);
     words_appended++;
-    *text += " ";
+    if (BidiDebug(2)) {
+      tprintf("Num spaces=%d, text=%s\n", numSpaces, text->string());
+    }
   } while (Next(RIL_WORD) && !IsAtBeginningOf(RIL_TEXTLINE));
   if (BidiDebug(1)) {
     tprintf("%d words printed\n", words_appended);
   }
-  text->truncate_at(text->length() - 1);
   *text += line_separator_;
   // If we just finished a paragraph, add an extra newline.
-  if (it_->block() == NULL || IsAtBeginningOf(RIL_PARA))
+  if (IsAtBeginningOf(RIL_PARA)) {
     *text += paragraph_separator_;
+  }
 }
 
 void ResultIterator::AppendUTF8ParagraphText(STRING *text) const {

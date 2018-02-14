@@ -17,9 +17,10 @@
  *
  **********************************************************************/
 
-#include <stdlib.h>
-#include "blckerr.h"
 #include "ocrblock.h"
+#include <stdlib.h>
+#include <memory>  // std::unique_ptr
+#include "blckerr.h"
 #include "stepblob.h"
 #include "tprintf.h"
 
@@ -84,6 +85,18 @@ int decreasing_top_order(  //
 void BLOCK::rotate(const FCOORD& rotation) {
   poly_block()->rotate(rotation);
   box = *poly_block()->bounding_box();
+}
+
+// Returns the bounding box including the desired combination of upper and
+// lower noise/diacritic elements.
+TBOX BLOCK::restricted_bounding_box(bool upper_dots, bool lower_dots) const {
+  TBOX box;
+  // This is a read-only iteration of the rows in the block.
+  ROW_IT it(const_cast<ROW_LIST*>(&rows));
+  for (it.mark_cycle_pt(); !it.cycled_list(); it.forward()) {
+    box += it.data()->restricted_bounding_box(upper_dots, lower_dots);
+  }
+  return box;
 }
 
 /**
@@ -368,9 +381,9 @@ void BLOCK::compute_row_margins() {
     TBOX row_box = row->bounding_box();
     int left_y = row->base_line(row_box.left()) + row->x_height();
     int left_margin;
-    ICOORDELT_LIST *segments = lines.get_line(left_y);
-    LeftMargin(segments, row_box.left(), &left_margin);
-    delete segments;
+    const std::unique_ptr</*non-const*/ ICOORDELT_LIST> segments_left(
+        lines.get_line(left_y));
+    LeftMargin(segments_left.get(), row_box.left(), &left_margin);
 
     if (row_box.top() >= drop_cap_bottom) {
       int drop_cap_distance = row_box.left() - row->space() - drop_cap_right;
@@ -382,9 +395,9 @@ void BLOCK::compute_row_margins() {
 
     int right_y = row->base_line(row_box.right()) + row->x_height();
     int right_margin;
-    segments = lines.get_line(right_y);
-    RightMargin(segments, row_box.right(), &right_margin);
-    delete segments;
+    const std::unique_ptr</*non-const*/ ICOORDELT_LIST> segments_right(
+        lines.get_line(right_y));
+    RightMargin(segments_right.get(), row_box.right(), &right_margin);
     row->set_lmargin(left_margin);
     row->set_rmargin(right_margin);
   }

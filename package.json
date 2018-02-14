@@ -43,8 +43,9 @@
     "node-gyp": "3.x"
   },
   "devDependencies": {
-    "mocha": "2.x",
-    "chai": "3.x"
+    "chai": "3.x",
+    "fs-finder": "^1.8.1",
+    "mocha": "2.x"
   },
   "engines": {
     "node": ">=0.10.x"

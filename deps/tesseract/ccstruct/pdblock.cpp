@@ -1,5 +1,5 @@
 /**********************************************************************
- * File:        pdblock.c  (Formerly pdblk.c)
+ * File:        pdblock.cpp  (Formerly pdblk.c)
  * Description: PDBLK member functions and iterator functions.
  * Author:					Ray Smith
  * Created:					Fri Mar 15 09:41:28 GMT 1991
@@ -17,10 +17,11 @@
  *
  **********************************************************************/
 
-#include          <stdlib.h>
-#include          "allheaders.h"
-#include          "blckerr.h"
-#include          "pdblock.h"
+#include "pdblock.h"
+#include <stdlib.h>
+#include <memory>  // std::unique_ptr
+#include "allheaders.h"
+#include "blckerr.h"
 
 // Include automatically generated configuration file if running autoconf.
 #ifdef HAVE_CONFIG_H
@@ -77,7 +78,6 @@ void PDBLK::set_sides(                       //set vertex lists
   right_it.add_list_before (right);
 }
 
-
 /**********************************************************************
  * PDBLK::contains
  *
@@ -126,7 +126,7 @@ void PDBLK::move(                  // reposition block
 
 // Returns a binary Pix mask with a 1 pixel for every pixel within the
 // block. Rotates the coordinate system by rerotation prior to rendering.
-Pix* PDBLK::render_mask(const FCOORD& rerotation) {
+Pix* PDBLK::render_mask(const FCOORD& rerotation, TBOX* mask_box) {
   TBOX rotated_box(box);
   rotated_box.rotate(rerotation);
   Pix* pix = pixCreate(rotated_box.width(), rotated_box.height(), 1);
@@ -141,9 +141,10 @@ Pix* PDBLK::render_mask(const FCOORD& rerotation) {
     // rasterized interior. (Runs of interior pixels on a line.)
     PB_LINE_IT *lines = new PB_LINE_IT(&image_block);
     for (int y = box.bottom(); y < box.top(); ++y) {
-      ICOORDELT_LIST* segments = lines->get_line(y);
+      const std::unique_ptr</*non-const*/ ICOORDELT_LIST> segments(
+          lines->get_line(y));
       if (!segments->empty()) {
-        ICOORDELT_IT s_it(segments);
+        ICOORDELT_IT s_it(segments.get());
         // Each element of segments is a start x and x size of the
         // run of interior pixels.
         for (s_it.mark_cycle_pt(); !s_it.cycled_list(); s_it.forward()) {
@@ -155,7 +156,6 @@ Pix* PDBLK::render_mask(const FCOORD& rerotation) {
                       xext, 1, PIX_SET, NULL, 0, 0);
         }
       }
-      delete segments;
     }
     delete lines;
   } else {
@@ -163,6 +163,7 @@ Pix* PDBLK::render_mask(const FCOORD& rerotation) {
     pixRasterop(pix, 0, 0, rotated_box.width(), rotated_box.height(),
                 PIX_SET, NULL, 0, 0);
   }
+  if (mask_box != NULL) *mask_box = rotated_box;
   return pix;
 }
 
@@ -196,7 +197,7 @@ void PDBLK::plot(                //draw outline
     //                      serial,startpt.x(),startpt.y());
     char temp_buff[34];
     #if defined(__UNIX__) || defined(MINGW)
-    sprintf(temp_buff, INT32FORMAT, serial);
+    snprintf(temp_buff, sizeof(temp_buff), "%" PRId32, serial);
     #else
     ultoa (serial, temp_buff, 10);
     #endif
